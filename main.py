@@ -7,14 +7,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# ---- FILL THESE IN ----
-
-
-MODEL = "openrouter/free"  # auto-picks an available free model; or use a specific "xxx:free" slug
-SITE_URL = "http://localhost:8000"  # replace with your hosted URL later (optional)
+# ---- CONFIG (secrets come from environment variables, never hardcode) ----
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+if not OPENROUTER_API_KEY:
+    raise RuntimeError("Set the OPENROUTER_API_KEY environment variable")
+MODEL = os.getenv("MODEL", "openrouter/free")  # auto-picks an available free model
+SITE_URL = os.getenv("SITE_URL", "http://localhost:8000")
 SITE_NAME = "Cricket Predictor"
-BAT_FILE = "batting_features.parquet"
-# -----------------------
+BAT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "batting_features.parquet")
+# ---------------------------------------------------------------------------
 
 BAT = pd.read_parquet(BAT_FILE).sort_values("date")
 client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
@@ -120,9 +121,10 @@ def predict(req: Req):
     cache[key] = out
     return out
 
+
 @app.get("/meta")
 def meta():
-    team_of = BAT.groupby("venue_id").team.agg(lambda s: s.mode()[0])   # most frequent team = rough "home" label
+    team_of = BAT.groupby("venue_id").team.agg(lambda x: x.mode()[0])  # most frequent team = rough "home" label
     cnt = BAT.groupby("venue_id").match_id.nunique()
     venues = [{"id": v, "label": f"{team_of[v]} home ({v[:8]})", "matches": int(cnt[v])}
               for v in cnt.sort_values(ascending=False).index[:40]]
